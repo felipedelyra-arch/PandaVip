@@ -1,0 +1,93 @@
+# Node
+node_modules/
+npm-debug.log*
+.pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.local
+firebase/functions/.env
+firebase/functions/.env.*
+!firebase/functions/.env.example
+firebase/functions/.runtimeconfig.json
+serviceAccountKey.json
+google-services.json
+GoogleService-Info.plist
+
+# Assinatura de release do Android (perder = não dá mais pra atualizar o app)
+app/android/key.properties
+*.jks
+*.keystore
+
+# Certificados e chaves privadas de assinatura (iOS e afins). Não é paranoia:
+# o `.p12` exportado do Keychain carrega a chave privada de distribuição, e o
+# `.mobileprovision` amarra ela ao app — quem tem os dois publica no lugar da
+# gente.
+*.p12
+*.pem
+*.key
+*.cer
+*.certSigningRequest
+*.mobileprovision
+
+# Mapas de desofuscação do build de release. NÃO são segredo — são o oposto:
+# quem os tem consegue LER o binário ofuscado, então não entram no repositório.
+# Guardar em cofre, uma cópia por versão publicada (ver LANCAMENTO.md).
+app/symbols/
+mapping.txt
+
+# Build
+dist/
+build/
+.next/
+out/
+admin/dist/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Flutter
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub-cache/
+app/.pub/
+app/ios/Pods/
+app/android/.gradle/
+app/android/local.properties
+app/**/GeneratedPluginRegistrant.*
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Functions build output
+firebase/functions/lib/
+
+# Stray root lockfile
+/package-lock.json
+
+# Documentos comerciais (não versionar)
+Proposta-Comercial-*.pdf
+
+# Cache do compilador Kotlin (Gradle)
+app/android/.kotlin/
+
+# Área de publicação do Firebase Hosting: cópia dos builds de admin/dist e
+# app/build/web. O Hosting exige que a pasta publicada fique dentro do
+# diretório do firebase.json, e build não entra no versionamento.
+firebase/hosting/
+
+# Artefatos do Playwright (screenshots e logs de sessão de teste)
+.playwright-mcp/
+
+# Configuração local do Claude Code (caminhos desta máquina)
+.claude/settings.local.json

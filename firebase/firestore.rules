@@ -1,0 +1,342 @@
+rules_version = '2';
+
+// PandaVip — Firestore Security Rules
+//
+// Coleções: users, subscriptions, plans, promotions, rewards, redemptions,
+// payments, pedidos
+//
+// Regra de ouro: escrita sensível (cobrança, assinatura, pagamentos, resgates,
+// concessão de admin) roda APENAS em Cloud Functions com Admin SDK, que ignora
+// estas rules. O cliente nunca escreve isso direto.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      // Admin exige segundo fator (TOTP): token sem ele nao passa. E o espelho
+      // `users/{uid}.role` (gravado por setAdminRole) precisa continuar 'admin':
+      // so a claim vale ate 1 hora depois do rebaixamento.
+      return isSignedIn() && request.auth.token.role == 'admin'
+             && request.auth.token.firebase.get('sign_in_second_factor', null) != null
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null) == 'admin';
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---- users ----
+    // Cada usuário lê/escreve só os próprios dados. Admin lê todos.
+    //
+    // A lista abaixo é branca, não preta: só estes campos saem do app. Antes a
+    // regra barrava apenas `role`, e todo o resto do documento ficava aberto —
+    // o que deixava o próprio dono reescrever `gatewayCustomerId` (o pagador
+    // no Mercado Pago, gravado pelo webhook) e `codigoSocio` (que é a
+    // identidade lida no PDV). Campo que decide dinheiro ou identidade só entra
+    // por Cloud Function, que roda com Admin SDK e ignora estas regras.
+    function camposDoCliente() {
+      return [
+        'uid', 'nome', 'email', 'telefone', 'endereco', 'enderecoEntrega',
+        'nascimento', 'fotoUrl', 'fcmToken', 'criadoEm',
+        'termosAceitosEm', 'termosVersao', 'marketingOptIn', 'analyticsOptIn'
+      ];
+    }
+
+    // A lista branca acima diz QUAIS campos entram. As três funções abaixo
+    // dizem O QUE cabe dentro deles — que é a metade que faltava.
+    //
+    // Sem isto, `nome` aceitava qualquer coisa: um objeto aninhado, um array,
+    // ou um texto de 1 MB (o teto do Firestore é o documento inteiro). Não é
+    // hipótese remota — é o que um script faz em trinta segundos com a conta
+    // dele mesmo, e sai caro de dois jeitos: infla o custo de leitura de todo
+    // mundo que lista sócios no painel, e o valor volta renderizado na tela do
+    // dono, que é onde um `nome` com 200 KB trava a lista.
+    //
+    // `data.get(campo, null)` em vez de `data.campo`: numa escrita com merge,
+    // `request.resource.data` é o documento RESULTANTE, e ele pode não ter o
+    // campo (quem nunca preencheu endereço). Acesso direto a campo ausente é
+    // erro em rules, e erro nega — o que transformaria "salvar o token do FCM"
+    // em permission-denied pra quem não tem endereço cadastrado.
+    function textoOk(valor, max) {
+      return valor == null || (valor is string && valor.size() <= max);
+    }
+    // Endereço de entrega salvo pelo carrinho: CEP e partes separadas, pra
+    // abrir o formulário já preenchido. `endereco` segue sendo a linha pronta.
+    function enderecoOk(e) {
+      return e == null || (e is map
+        && e.keys().hasOnly(['cep', 'rua', 'numero', 'complemento', 'bairro', 'cidade'])
+        && textoOk(e.get('cep', null), 9)
+        && textoOk(e.get('rua', null), 150)
+        && textoOk(e.get('numero', null), 20)
+        && textoOk(e.get('complemento', null), 120)
+        && textoOk(e.get('bairro', null), 100)
+        && textoOk(e.get('cidade', null), 100));
+    }
+    // Idade mínima de 14 anos (Termos, item 2). Só quando a data muda: perfil
+    // antigo com data menor continua salvando o resto. 5113 dias ≈ 14 anos.
+    function idadeOk() {
+      let n = request.resource.data.get('nascimento', null);
+      return n == null
+             || (resource != null && resource.data.get('nascimento', null) == n)
+             || n <= request.time - duration.value(5113, 'd');
+    }
+    // E-mail do perfil e o da conta: so aceita o do token, ou o que ja estava
+    // gravado (perfil antigo continua salvando o resto).
+    function emailOk() {
+      let e = request.resource.data.get('email', null);
+      return e == null
+             || (resource != null && resource.data.get('email', null) == e)
+             || e.lower() == request.auth.token.get('email', '').lower();
+    }
+    function boolOk(valor) {
+      return valor == null || valor is bool;
+    }
+    function dataOk(valor) {
+      return valor == null || valor is timestamp;
+    }
+    // Tetos folgados de propósito. O objetivo é barrar o absurdo, não policiar
+    // o cadastro: quem tem nome comprido, endereço longo ou uma URL de foto
+    // do Google com bastante query string continua salvando normalmente.
+    //
+    // ⚠️ O teto vale também pro valor que JÁ ESTÁ no documento, porque numa
+    // atualização parcial ele reaparece em `request.resource.data`. Apertar
+    // qualquer um destes números depois travaria as escritas de quem estiver
+    // acima do novo limite, inclusive as que não mexem naquele campo.
+    function bemFormado(userId) {
+      return textoOk(request.resource.data.get('uid', null), 128)
+             && request.resource.data.get('uid', userId) == userId
+             && textoOk(request.resource.data.get('nome', null), 120)
+             && textoOk(request.resource.data.get('email', null), 254)
+             && emailOk()
+             && boolOk(request.resource.data.get('marketingOptIn', null))
+             && boolOk(request.resource.data.get('analyticsOptIn', null))
+             && textoOk(request.resource.data.get('telefone', null), 32)
+             && textoOk(request.resource.data.get('endereco', null), 300)
+             && enderecoOk(request.resource.data.get('enderecoEntrega', null))
+             && textoOk(request.resource.data.get('fotoUrl', null), 2000)
+             && textoOk(request.resource.data.get('fcmToken', null), 4096)
+             && dataOk(request.resource.data.get('nascimento', null))
+             && idadeOk()
+             && dataOk(request.resource.data.get('criadoEm', null))
+             && textoOk(request.resource.data.get('termosVersao', null), 20)
+             && dataOk(request.resource.data.get('termosAceitosEm', null));
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId)
+                    && request.resource.data.keys().hasOnly(camposDoCliente())
+                    && bemFormado(userId)
+                    // Carimbo do aceite não pode ser forjado: só o horário do servidor.
+                    && (!('termosAceitosEm' in request.resource.data)
+                        || request.resource.data.termosAceitosEm == request.time);
+      allow update: if isOwner(userId)
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(camposDoCliente())
+                    && bemFormado(userId)
+                    && (!request.resource.data.diff(resource.data)
+                          .affectedKeys().hasAny(['termosAceitosEm'])
+                        || request.resource.data.termosAceitosEm == request.time);
+      allow delete: if isAdmin();
+
+      // ---- users/{userId}/notifications ----
+      // Central de avisos. Dono lê, marca como lida (update) e apaga da
+      // própria caixa — o histórico do painel fica em notificationLogs, que
+      // não é tocado. Criação só backend (envio de push). Rules de
+      // subcoleção não herdam do doc pai.
+      match /notifications/{notifId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow update: if isOwner(userId) // marcar como lida, e só isso
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida'])
+                      && request.resource.data.lida is bool;
+        allow delete: if isOwner(userId);
+        allow create: if false;   // apenas Cloud Functions
+      }
+    }
+
+    // ---- subscriptions ----
+    // Somente leitura pelo dono/admin. Escrita só backend (Cloud Functions).
+    match /subscriptions/{subId} {
+      allow read: if isSignedIn()
+                  && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // apenas Cloud Functions
+    }
+
+    // ---- config ----
+    // ATENÇÃO: os ÚNICOS documentos de leitura pública, e têm que continuar
+    // assim. O VersionGate (app/lib/core/version_gate.dart) lê config/app antes
+    // de qualquer login pra decidir se bloqueia a versão velha, e a tela dele
+    // usa os links da loja de config/restaurante; exigir sessão aqui deixaria o
+    // app impossível de destravar.
+    //
+    // Lista nomeada, não curinga: antes `config/{docId}` inteiro era público, e
+    // `config/starway` (loja e empresa no PDV) saía pra quem pedisse. Documento
+    // novo nasce fechado; só entra na lista se o app precisar dele deslogado.
+    match /config/{docId} {
+      allow read: if docId in ['app', 'restaurante'] || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---- plans ----
+    // Vitrine de planos. Exige sessão: o router (app/lib/router/app_router.dart)
+    // manda todo mundo sem sessão pro /login, então nenhuma tela lê isso
+    // deslogado. Escrita só admin/backend.
+    match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- promotions ----
+    // Só logado lê (ofertas são o produto do clube). Escrita só admin.
+    match /promotions/{promoId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- rewards ----
+    // Só logado lê. Escrita só admin.
+    match /rewards/{rewardId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      // ---- rewards/{rewardId}/cupons ----
+      // O estoque virou um documento por unidade, e resgatar é reservar um
+      // deles (ver functions/src/lib/cupons.ts). Ninguém toca isso pelo
+      // cliente: quem reserva é a Cloud Function, com Admin SDK.
+      //
+      // Fechado também para LEITURA, e para o admin. O que o app precisa
+      // saber — quantos sobraram — está em `rewards/{id}.estoque`, mantido
+      // pelo gatilho. Abrir a subcoleção entregaria de graça a lista de quem
+      // resgatou o quê, que é dado de outro sócio.
+      //
+      // Regra de subcoleção não herda a do documento pai; sem este bloco a
+      // leitura cairia no `match /{document=**}` lá embaixo, que já nega — o
+      // bloco existe para deixar a intenção escrita, não por acaso.
+      match /cupons/{cupomId} {
+        allow read, write: if false; // apenas Cloud Functions
+      }
+    }
+
+    // ---- menu ----
+    // Cardápio: um doc por prato, categoria é campo. Só logado lê (a rota
+    // /cardapio também está atrás da guarda de auth), escrita só admin.
+    match /menu/{itemId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- funcionarios ----
+    // Equipe que pode receber gorjeta. Sócio logado lê pra escolher quem o
+    // atendeu; só admin cadastra e edita.
+    //
+    // ⚠️ A chave Pix daqui fica visível pra qualquer cliente logado — é o que
+    // faz a gorjeta funcionar. Por isso o painel exige chave aleatória: chave
+    // que seja CPF ou telefone estaria publicando dado pessoal do funcionário
+    // pra clientela inteira.
+    match /funcionarios/{funcionarioId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- gorjetas ----
+    // Gorjeta que o sócio diz ter mandado por Pix ao garçom que validou o
+    // prêmio dele. O dinheiro vai direto do banco do cliente pro garçom; isto
+    // é só o "já fiz o Pix" que alimenta o ranking do painel — informado, não
+    // confirmado. Id = id do resgate: uma por prêmio entregue, e só o dono do
+    // resgate, só depois de usado, só para quem de fato atendeu. Sem userId:
+    // o ranking não precisa saber quem deu.
+    match /gorjetas/{redemptionId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['funcionarioId', 'valor', 'criadoEm'])
+        && request.resource.data.funcionarioId is string
+        && request.resource.data.criadoEm == request.time
+        && (request.resource.data.get('valor', null) == null
+            || (request.resource.data.valor is number
+                && request.resource.data.valor > 0
+                && request.resource.data.valor <= 1000))
+        && exists(/databases/$(database)/documents/redemptions/$(redemptionId))
+        && get(/databases/$(database)/documents/redemptions/$(redemptionId)).data.userId == request.auth.uid
+        && get(/databases/$(database)/documents/redemptions/$(redemptionId)).data.status == 'usado'
+        && get(/databases/$(database)/documents/redemptions/$(redemptionId)).data.get('funcionarioId', null)
+             == request.resource.data.funcionarioId;
+      allow update, delete: if false;
+    }
+
+    // ---- redemptions ----
+    // Dono lê os próprios resgates. Admin lê todos. Escrita só backend
+    // (resgate baixa estoque dentro da janela; validação marca como usado).
+    match /redemptions/{redemptionId} {
+      allow read: if isSignedIn()
+                  && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // apenas Cloud Functions
+    }
+
+    // ---- pedidos ----
+    // Comanda do delivery/retirada. Sócio lê os próprios, admin lê todos (é a
+    // tela da cozinha no painel). Escrita SÓ backend: `criarPedido` calcula o
+    // total lendo `menu` no servidor, e o status muda no fluxo da cozinha —
+    // deixar o cliente escrever aqui seria deixá-lo escolher o próprio preço.
+    match /pedidos/{pedidoId} {
+      allow read: if isSignedIn()
+                  && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // apenas Cloud Functions
+    }
+
+    // ---- payments ----
+    // Dono lê as próprias cobranças (extrato do app: mensalidade + conta de
+    // salão). Admin lê todas, que é o financeiro do painel. Escrita só backend
+    // (webhooks de pagamento e o PDV que fecha conta no salão).
+    match /payments/{paymentId} {
+      allow read: if isSignedIn()
+                  && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // apenas Cloud Functions
+    }
+
+    // ---- socioCodes / referralCodes ----
+    // Índice reverso codigo -> uid. Ninguém lê pelo cliente: quem resolve o
+    // código é a Cloud Function (carteirinha no PDV, indicação). Deixar público
+    // entregaria a lista de códigos válidos pra quem quisesse chutar.
+    match /socioCodes/{codigo} {
+      allow read, write: if false; // apenas Cloud Functions
+    }
+    match /referralCodes/{codigo} {
+      allow read, write: if false; // apenas Cloud Functions
+    }
+
+    // ---- exclusoes ----
+    // Controle de progresso da exclusão de conta (functions/src/account.ts).
+    // Guarda em que etapa cada pedido parou, para poder retomar. Fechado até
+    // para o dono do uid: o documento sobrevive de propósito ao perfil, e o
+    // conteúdo é operacional, não é dado que o sócio precise ver.
+    match /exclusoes/{uid} {
+      allow read, write: if false; // apenas Cloud Functions
+    }
+
+    // ---- rateLimits ----
+    // Contadores de chamada por sócio e por ação (functions/src/lib/rateLimit.ts).
+    // Fechado dos dois lados, e é o ponto todo: se o cliente pudesse escrever
+    // aqui, zerar o próprio contador seria a primeira coisa que quem está
+    // abusando faria — e o limite não limitaria nada. Ler também não: a
+    // contagem diz quanto ainda dá pra tentar antes de bater no teto.
+    match /rateLimits/{chave} {
+      allow read, write: if false; // apenas Cloud Functions
+    }
+
+    // ---- notificationLogs ----
+    // Histórico de avisos enviados, mostrado na tela de Notificações do painel.
+    // Só admin lê; quem escreve é a function que dispara o aviso.
+    match /notificationLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // apenas Cloud Functions
+    }
+
+    // fallback: nega tudo que não casou acima
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push (FCM via APNs). O Xcode troca para "production" ao arquivar para a loja. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- "Continuar com Apple" (obrigatório na App Store quando há login Google). -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- App Check (AppleAppAttestProvider em main.dart). -->
+	<key>com.apple.developer.devicecheck.appattest-environment</key>
+	<string>production</string>
+</dict>
+</plist>

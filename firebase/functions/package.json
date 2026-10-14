@@ -1,0 +1,42 @@
+{
+  "name": "pandavip-functions",
+  "version": "1.0.0",
+  "description": "Cloud Functions do PandaVip (Tio Panda)",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "lint": "oxlint src",
+    "test:rules": "node --test ../test/rules.test.js",
+    "test:storage": "node --test ../test/storage.rules.test.js",
+    "test:gateway": "node --test ../test/gateway.test.js",
+    "test:pedidos": "node --test ../test/pedidos.test.js",
+    "test:expediente": "node --test ../test/expediente.test.js",
+    "test:starway": "node --test ../test/starway.test.js",
+    "test:consumo": "node --test ../test/consumo.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.4.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/node": "^22.10.0",
+    "oxlint": "^1.86.0",
+    "typescript": "^5.7.2"
+  },
+  "private": true,
+  "overrides": {
+    "@grpc/grpc-js": "^1.13.6",
+    "gaxios": {
+      "uuid": "11.1.1"
+    }
+  }
+}

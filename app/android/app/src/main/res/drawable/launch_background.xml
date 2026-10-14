@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fundo da splash nativa (Android 11 e anteriores). Laranja da marca em vez
+     do branco/preto padrão, pra não piscar uma cor estranha antes do app. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/panda_laranja" />
+</layer-list>

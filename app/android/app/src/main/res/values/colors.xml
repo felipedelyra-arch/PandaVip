@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FF8D06</color>
+    <!-- Laranja da marca, o mesmo de PandaColors.laranja (lib/core/theme/colors.dart).
+         Mudou lá? Muda aqui: a splash é nativa e não enxerga o tema do Flutter. -->
+    <color name="panda_laranja">#E86A22</color>
+</resources>

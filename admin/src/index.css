@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Fontes — as mesmas do app (app/assets/fonts), convertidas de .ttf pra .woff2:
+   1,2 MB viraram 550 KB, e o painel é aberto do celular no meio do serviço.
+   Locais, sem CDN. Arquivos variáveis, daí a faixa de peso num @font-face só.
+
+   `swap`: o texto aparece na fonte do sistema no primeiro quadro e troca quando
+   a fonte chega — nada de tela em branco esperando download.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/Inter.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("./assets/fonts/Fraunces.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+   Camada semântica. Cada cor é uma variável que troca de valor no tema escuro,
+   então `bg-superficie` funciona nos dois sem `dark:` espalhado pelas telas.
+--------------------------------------------------------------------------- */
+:root {
+  --p-fundo: #fbfaf8;
+  --p-superficie: #ffffff;
+  --p-superficie-2: #f2efea;
+  --p-linha: rgba(23, 19, 16, 0.1);
+  --p-linha-forte: rgba(23, 19, 16, 0.16);
+  --p-tinta: #171310;
+  --p-tinta-2: #5c554e;
+  --p-tinta-3: #736a63;
+  --p-marca: #f47a20;
+  --p-marca-escura: #d9631a;
+  --p-marca-tinta: #c25a0d;
+  --p-ok: #2fbf71;
+  --p-ok-tinta: #12784a;
+  --p-erro: #e23b2e;
+  --p-erro-tinta: #c22a1f;
+  --p-sombra: 0 1px 2px rgba(23, 19, 16, 0.05), 0 1px 1px rgba(23, 19, 16, 0.04);
+}
+
+.dark {
+  --p-fundo: #131211;
+  --p-superficie: #1c1a18;
+  --p-superficie-2: #232120;
+  --p-linha: rgba(255, 255, 255, 0.1);
+  --p-linha-forte: rgba(255, 255, 255, 0.18);
+  --p-tinta: #f2eee9;
+  --p-tinta-2: #a8a099;
+  --p-tinta-3: #8b837b;
+  --p-marca: #f47a20;
+  --p-marca-escura: #ff8f3d;
+  --p-marca-tinta: #ffa25c;
+  --p-ok: #2fbf71;
+  --p-ok-tinta: #5fd79a;
+  --p-erro: #e23b2e;
+  --p-erro-tinta: #ff7a6e;
+  --p-sombra: none;
+}
+
+@theme inline {
+  --color-fundo: var(--p-fundo);
+  --color-superficie: var(--p-superficie);
+  --color-superficie-2: var(--p-superficie-2);
+  --color-linha: var(--p-linha);
+  --color-linha-forte: var(--p-linha-forte);
+  --color-tinta: var(--p-tinta);
+  --color-tinta-2: var(--p-tinta-2);
+  --color-tinta-3: var(--p-tinta-3);
+  --color-marca: var(--p-marca);
+  --color-marca-escura: var(--p-marca-escura);
+  --color-marca-tinta: var(--p-marca-tinta);
+  /* Texto sobre o fundo laranja das telas de abertura: o branco dá só 2.8:1. */
+  --color-sobre-marca: #1a120b;
+  --color-ok: var(--p-ok);
+  --color-ok-tinta: var(--p-ok-tinta);
+  --color-erro: var(--p-erro);
+  --color-erro-tinta: var(--p-erro-tinta);
+
+  /* Apelidos antigos — as telas que ainda não foram redesenhadas herdam a
+     paleta nova sem edição. `panda-cinza-texto` era #8a8a8a (3,6:1 no branco,
+     reprova em AA); agora aponta pro tinta-3, que passa. */
+  --color-panda-laranja: var(--p-marca);
+  --color-panda-laranja-escuro: var(--p-marca-escura);
+  --color-panda-preto: var(--p-tinta);
+  --color-panda-cinza: var(--p-superficie-2);
+  --color-panda-cinza-texto: var(--p-tinta-3);
+  --color-panda-verde: var(--p-ok-tinta);
+  --color-panda-vermelho: var(--p-erro-tinta);
+  --color-panda-superficie-dark: var(--p-superficie-2);
+  --color-panda-card-dark: var(--p-superficie);
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--p-fundo);
+  color: var(--p-tinta);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------------------------------------------------------------------------
+   Tipografia
+--------------------------------------------------------------------------- */
+
+/* Fraunces só nos títulos de página. É o fio de personalidade do painel; se
+   descer pros rótulos e botões, vira enfeite e atrapalha a leitura rápida.
+   SOFT/WONK deixam o serifado menos institucional — restaurante de família,
+   não banco. */
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 24, "WONK" 1, "opsz" 40;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Rótulo de comanda: o texto miúdo que nomeia um número. Caixa alta e espaçada
+   pra ser reconhecido como etiqueta sem competir com o valor que ele nomeia. */
+.rotulo {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--p-tinta-3);
+}
+
+/* Dinheiro, datas e contadores em largura fixa: as colunas param de dançar
+   quando os valores mudam em tempo real. */
+table,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Números de destaque: apertados, pesados e sem competir com o rótulo. */
+.numero {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Foco visível pra quem navega por teclado, sem poluir o clique de mouse. */
+:focus-visible {
+  outline: 2px solid var(--p-marca);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Campos de data/hora e cor herdam o tema do sistema, não o da página: no tema
+   escuro o ícone do calendário sumia contra o fundo. */
+.dark input[type="datetime-local"],
+.dark input[type="date"],
+.dark input[type="time"] {
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Movimento — um só elemento anima (o ponto de "no ar"), e some pra quem pediu
+   menos movimento.
+--------------------------------------------------------------------------- */
+@keyframes panda-pulso {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+/* Entrada da saudação: sobe um fio e aparece. Só na abertura do painel. */
+@keyframes panda-surge {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Barrinha de carregamento indo e voltando — não finge saber a porcentagem. */
+@keyframes panda-carrega {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

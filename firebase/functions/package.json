@@ -29,7 +29,7 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^22.10.0",
-    "oxlint": "^1.86.0",
+    "oxlint": "^1.87.0",
     "typescript": "^5.7.2"
   },
   "private": true,

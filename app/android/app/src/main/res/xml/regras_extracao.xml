@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31). O `android:allowBackup="false"` do manifesto desliga o
+  backup na nuvem em todas as versões, mas a partir do 12 a transferência
+  direta entre aparelhos ("device transfer", na troca de celular) passou a ser
+  governada por ESTE arquivo, e ela ignora o allowBackup. Sem isto, o
+  SharedPreferences do app — que guarda a fila de chamadas pendentes — viajaria
+  pro aparelho novo por esse caminho.
+
+  Excluímos tudo, dos dois lados. Nada que o app guarda em disco é fonte da
+  verdade: perfil, pontos, cupons e assinatura voltam do Firestore no primeiro
+  login, e a fila pendente é rascunho que não faz sentido migrar.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

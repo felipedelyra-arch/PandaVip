@@ -1,0 +1,49 @@
+/*
+ * Splash que aparece antes do Flutter pintar o primeiro quadro.
+ *
+ * Mora aqui, e não num <style> dentro do index.html, por causa do
+ * Content-Security-Policy servido pelo Firebase Hosting (ver firebase.json):
+ * com `style-src 'self'` o bloco inline seria simplesmente ignorado e o sócio
+ * veria uma página branca até o app carregar.
+ */
+#panda-splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: #f47a20;
+  z-index: 9999;
+  transition: opacity 0.4s ease;
+}
+
+#panda-splash img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+#panda-splash .t {
+  color: #fff;
+  font-family: sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+#panda-splash .s {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

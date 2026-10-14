@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// PandaVip — Storage Rules
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      // Admin exige segundo fator (TOTP): token sem ele nao passa. E o espelho
+      // `users/{uid}.role` precisa continuar 'admin' (rebaixado perde na hora).
+      return isSignedIn() && request.auth.token.role == 'admin'
+             && request.auth.token.firebase.get('sign_in_second_factor', null) != null
+             && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', null) == 'admin';
+    }
+    function isImage() {
+      return request.resource.contentType.matches('image/.*')
+             && request.resource.size < 5 * 1024 * 1024; // 5 MB
+    }
+
+    // Imagens de promoções e premiações: leitura pública, upload só admin.
+    match /promotions/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin() && isImage();
+    }
+    match /rewards/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin() && isImage();
+    }
+
+    // Fotos dos pratos do cardápio.
+    match /menu/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin() && isImage();
+    }
+
+    // Foto de perfil: cada um escreve e lê a própria; o admin lê todas.
+    //
+    // Antes bastava ter sessão pra ler, o que deixava um sócio buscar a foto de
+    // outro se descobrisse o uid. Ninguém precisa disso: o app só mostra a foto
+    // do próprio dono e o painel não exibe foto de sócio em tela nenhuma.
+    //
+    // ⚠️ Isto fecha o caminho pelo SDK, não a URL de download que o app grava
+    // em `users/{uid}.fotoUrl` — essa carrega token e funciona pra quem tiver o
+    // link. O que protege a URL é a rule de `users`, que só entrega o documento
+    // ao dono e ao admin.
+    //
+    // Só o que o app grava (profile_screen.dart: `avatar_<ms>.jpg`, JPEG): o
+    // `image/.*` de antes deixava qualquer conta guardar SVG e arquivo com
+    // nome livre. O `delete` é separado porque `isImage()` lê
+    // `request.resource`, que no delete é nulo — e isso negava o dono.
+    match /users/{userId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isSignedIn() && request.auth.uid == userId
+                            && fileName.matches('avatar_[0-9]+[.]jpg')
+                            && request.resource.contentType == 'image/jpeg'
+                            && isImage();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

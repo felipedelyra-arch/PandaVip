@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "seu-projeto"
+  },
+  "targets": {
+    "seu-projeto": {
+      "hosting": {
+        "painel": [
+          "seu-projeto"
+        ],
+        "app": [
+          "seu-projeto-app"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,0 +1,68 @@
+# Varredura de dependências vulneráveis.
+#
+# Roda a cada push, a cada PR, e uma vez por semana mesmo sem ninguém mexer no
+# código — que é o caso que importa: a vulnerabilidade quase nunca aparece
+# porque alguém mudou algo aqui, e sim porque um pacote que já estava instalado
+# foi denunciado ontem. Sem o agendamento, o aviso só chegaria no próximo push.
+#
+# `--audit-level=high` reprova o job em alto/crítico. Moderado aparece no log
+# sem derrubar o build, de propósito: o painel e as functions carregam um punhado
+# de moderados transitivos do firebase-admin que só se resolvem com salto de
+# versão maior, e um build sempre vermelho é um build que ninguém mais lê.
+name: Dependências
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Segunda-feira, 09:00 em São Paulo (12:00 UTC).
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+jobs:
+  auditoria:
+    name: npm audit (${{ matrix.projeto }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        projeto: [admin, firebase/functions]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Instalar
+        working-directory: ${{ matrix.projeto }}
+        run: npm ci
+
+      - name: Relatório completo (não reprova)
+        working-directory: ${{ matrix.projeto }}
+        run: npm audit || true
+
+      - name: Reprovar em alto/crítico
+        working-directory: ${{ matrix.projeto }}
+        run: npm audit --audit-level=high
+
+  segredos:
+    name: Segredo vazado no diff
+    runs-on: ubuntu-latest
+    # O gitleaks lista os commits do PR pela API. Sem `pull-requests: read`
+    # o token padrão toma 403 e o job quebra antes de escanear qualquer coisa.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Histórico completo: a varredura tem que enxergar o commit anterior
+          # pra comparar, e num clone raso não existe commit anterior.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

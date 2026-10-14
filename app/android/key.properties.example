@@ -1,0 +1,19 @@
+# Modelo do arquivo de assinatura de release.
+#
+# 1) Gere o keystore (guarde bem — perder essa chave significa nunca mais poder
+#    atualizar o app publicado na Play Store):
+#
+#    keytool -genkeypair -v -keystore %USERPROFILE%\pandavip-upload.jks \
+#      -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+#    PKCS12 é o formato padrão do keytool moderno; o JKS antigo ainda funciona,
+#    mas sai com aviso de formato proprietário a cada uso.
+#
+# 2) Copie este arquivo para `android/key.properties` e preencha.
+#    O `key.properties` e o `.jks` NÃO entram no git.
+
+storePassword=SUA_SENHA_DO_KEYSTORE
+keyPassword=SUA_SENHA_DA_CHAVE
+keyAlias=upload
+# Caminho absoluto, com barras normais: C:/Users/voce/pandavip-upload.jks
+storeFile=CAMINHO/PARA/pandavip-upload.jks

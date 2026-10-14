@@ -1,0 +1,192 @@
+# Build de release do app, na nuvem.
+#
+# ## Por que existe
+#
+# O R8 e a ofuscação do Dart só rodam no build de **release**. `flutter run` e
+# `flutter test` não exercitam nenhum dos dois, então "passou nos testes" não
+# diz nada sobre o pacote que vai pra loja: o modo clássico de quebrar é o R8
+# remover uma classe que só é alcançada por reflexão, e isso aparece como tela
+# branca no aparelho, nunca no CI de testes.
+#
+# Este workflow fecha esse buraco sem exigir Flutter SDK na máquina de
+# ninguém. Ele constrói o APK de release de verdade — com R8 e com
+# `--obfuscate` — e publica o arquivo como artefato pra instalar no aparelho:
+#
+#   Actions > (esta execução) > Artifacts > apk-release
+#   adb install -r app-release.apk
+#
+# ## O que ele NÃO faz
+#
+# Não assina com a chave de upload: ela não existe no CI, e o
+# `build.gradle.kts` FALHA o release sem `key.properties`. O job gera um
+# keystore descartável (chave nova a cada execução, nunca a de debug nem a da
+# loja). O APK daqui serve pra TESTAR (instala e roda igual), não pra publicar. O pacote que vai pra
+# Play Store continua saindo da sua máquina, assinado, como está no
+# LANCAMENTO.md.
+#
+# ## O build web, e por que ele também está aqui
+#
+# O mesmo motivo, por outro caminho: o App Check só pode ser **imposto** no
+# console quando as três plataformas já aparecem enviando token — impor com um
+# cliente legítimo de fora derruba esse cliente. Android e iOS já mandam; o
+# web do app não, porque `RECAPTCHA_SITE_KEY` só entra por `--dart-define` no
+# build, e ninguém tem Flutter na máquina. Enquanto isso não sair, o controle
+# fica desligado pras três (SEGURANCA.md §3, passo 3).
+#
+# O job `web` faz esse build com a chave e publica o resultado como artefato.
+# Ele NÃO faz o deploy: isso exigiria credencial do Firebase aqui dentro, e
+# publicar em produção continua sendo um ato seu. O ciclo é:
+#
+#   Actions > (esta execução) > Artifacts > web-release  (baixe e descompacte)
+#   mkdir -p firebase/hosting/app && rm -rf firebase/hosting/app/*
+#   cp -r <descompactado>/* firebase/hosting/app/
+#   cd firebase && npx -y firebase-tools deploy --only hosting:app
+#
+# Sempre `hosting:app`, nunca `--only hosting`: o alvo `painel` aponta pra
+# `hosting/painel`, que pode não existir na sua cópia e faz o deploy falhar no
+# meio.
+name: App — build de release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "app/**"
+      - ".github/workflows/app-release.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      # Também aqui, não só no push: mudança neste arquivo precisa poder ser
+      # provada no PR que a faz. Sem isto, um erro no workflow só aparece
+      # depois do merge.
+      - ".github/workflows/app-release.yml"
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: analyze + test + APK de release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # O Gradle precisa de JDK completo (não serve JRE). 17 é o que o
+      # build.gradle.kts declara em sourceCompatibility/jvmTarget.
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          # `stable` acompanha o canal; o pubspec exige Dart ^3.12.2 e o stable
+          # atual está acima disso. Se um dia o stable saltar e quebrar algo
+          # aqui, troque por `flutter-version: <x.y.z>` pra fixar — é o mesmo
+          # raciocínio de pinar dependência.
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        working-directory: app
+        run: flutter pub get
+
+      # Roda antes do build: falha de análise aparece em segundos, e não
+      # depois de esperar o Gradle inteiro.
+      - name: Análise estática
+        working-directory: app
+        run: flutter analyze
+
+      - name: Testes
+        working-directory: app
+        run: flutter test
+
+      # O Gradle exige `key.properties` no release. Chave descartável, criada
+      # aqui e jogada fora com o runner: não é segredo e não assina nada de loja.
+      - name: Keystore descartável (só para o build de teste)
+        working-directory: app/android
+        run: |
+          keytool -genkeypair -keystore ci-descartavel.jks -alias ci -keyalg RSA -keysize 2048 \
+            -validity 2 -dname "CN=CI descartavel" -storepass ci-descartavel -keypass ci-descartavel
+          printf 'storeFile=../ci-descartavel.jks\nstorePassword=ci-descartavel\nkeyAlias=ci\nkeyPassword=ci-descartavel\n' > key.properties
+
+      # O passo que importa. As duas flags são as mesmas do LANCAMENTO.md — se
+      # divergirem, este build deixa de provar o que vai pra loja.
+      - name: APK de release (R8 + ofuscação do Dart)
+        working-directory: app
+        run: flutter build apk --release --obfuscate --split-debug-info=symbols/
+
+      - name: Publicar o APK pra instalar no aparelho
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: apk-release
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      # Sem estes dois, crash desta build vira endereço de memória no
+      # Crashlytics. Ficam 90 dias aqui; o que virar release vai pro cofre
+      # (ver LANCAMENTO.md).
+      - name: Publicar os mapas de desofuscação
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: simbolos-e-mapping
+          path: |
+            app/symbols/
+            app/build/app/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+
+  web:
+    name: build web com App Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Sem `setup-java`: o build web não passa pelo Gradle. Este job existe
+      # separado do de cima justamente por isso — roda em paralelo e não paga o
+      # preço do Android. `analyze` e `test` também não se repetem aqui: o job
+      # `release` já os roda no mesmo commit.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        working-directory: app
+        run: flutter pub get
+
+      # A chave está aqui, à vista, e isso é deliberado: a chave de SITE do
+      # reCAPTCHA é pública por construção — ela vai no JavaScript de qualquer
+      # página que use reCAPTCHA, e o Google a valida contra o domínio de
+      # origem. De outro domínio ela não resolve. O raciocínio completo está em
+      # app/lib/core/app_check.dart e na §4 do SEGURANCA.md; o par secreto dela
+      # fica no Google, e nunca existiu deste lado.
+      #
+      # Guardá-la num secret do GitHub só traria o modo de falha ruim: secret
+      # não configurado vira string vazia, `kChaveRecaptcha.isEmpty` desliga o
+      # App Check no web, e sai daqui um build silenciosamente sem o controle
+      # que este job existe pra entregar. À vista, isso não acontece.
+      - name: Build web (release, com a chave do App Check)
+        working-directory: app
+        run: |
+          flutter build web --release \
+            --dart-define=RECAPTCHA_SITE_KEY=${{ secrets.RECAPTCHA_SITE_KEY }}
+
+      # `--dart-define` é silencioso: nome errado da variável não dá erro, só
+      # produz constante vazia — e o build que sai daqui parece bom e não
+      # manda token. Como `kChaveRecaptcha` é `const`, o dart2js embute a
+      # string literal no bundle; se ela não estiver lá, a chave não chegou.
+      - name: Conferir que a chave entrou no bundle
+        working-directory: app
+        run: |
+          if grep -rqF "${{ secrets.RECAPTCHA_SITE_KEY }}" build/web --include='*.js'; then
+            echo "OK: a chave do reCAPTCHA está no bundle."
+          else
+            echo "FALHOU: a chave não chegou ao bundle — este build não manda"
+            echo "token de App Check. Publicá-lo mantém a imposição travada."
+            exit 1
+          fi
+
+      - name: Publicar o site pra subir no hosting:app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: web-release
+          path: app/build/web
+          if-no-files-found: error

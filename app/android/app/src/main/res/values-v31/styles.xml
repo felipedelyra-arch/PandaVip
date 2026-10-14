@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31) ignora o windowBackground na abertura e usa a splash
+     do sistema: ícone do app centralizado sobre `windowSplashScreenBackground`.
+     Sem declarar essa cor, ele cai no fundo do tema — preto no modo escuro.
+     É esta a tela preta com a logo que aparecia antes do app abrir. -->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/panda_laranja</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/panda_laranja</item>
+    </style>
+</resources>

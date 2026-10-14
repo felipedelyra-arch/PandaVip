@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Antes usava `?android:colorBackground`, que herdava do tema do sistema:
+     branco no modo claro e PRETO no modo escuro. Era daí que vinha a tela
+     preta antes do app abrir. Agora é o laranja da marca nos dois modos. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/panda_laranja" />
+</layer-list>

@@ -23,7 +23,7 @@
     "test:consumo": "node --test ../test/consumo.test.js"
   },
   "dependencies": {
-    "firebase-admin": "^14.4.0",
+    "firebase-admin": "^14.5.0",
     "firebase-functions": "^7.4.0"
   },
   "devDependencies": {
